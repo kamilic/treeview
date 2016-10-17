@@ -410,7 +410,12 @@ var TreeForm = (function () {
 
             return TreeForm;
         })();
-    TreeForm.onClick = null;
+    TreeForm.onClick = function (callback) {
+        if (!callback) {
+            throw Error("callback is not a function");
+        }
+        Mediator.subscribe(TreeForm.EVENT_CLICK, new Mediator.EventObj(callback));
+    };
 
     return TreeForm;
 })();
