@@ -2,10 +2,10 @@
  * Created by x on 2016/9/23.
  */
 var TreeForm = (function () {
-    var compatable = {
-        IE: navigator.userAgent.match(/\bMSIE (.).*;/) ? Number(navigator.userAgent.match(/\bMSIE (.).*;/)) : null
-    };
-    var Mediator = (function () {
+    var compatible = {
+            IE: navigator.userAgent.match(/\bMSIE (.).*;/) ? Number(navigator.userAgent.match(/\bMSIE (.).*;/)[1]) : null
+        },
+        Mediator = (function () {
             var topics = [];
 
             function subscribe(topic, eventObj) {
@@ -203,9 +203,21 @@ var TreeForm = (function () {
                 console.warn("removeChild node.type is equal to TreeNode.ITEM.expected TreeNode.EXPAND.It will return null;");
                 return null;
             };
-
-            Object.defineProperty(TreeNode.prototype, "children", {
-                get: function () {
+            if (compatible.IE !== null && compatible.IE >= 9) {
+                Object.defineProperty(TreeNode.prototype, "children", {
+                    get: function () {
+                        var that = this,
+                            result = [];
+                        traverseChild(function (node) {
+                            result.push(node);
+                            return true;
+                        }, that);
+                        return result;
+                    }
+                });
+            }
+            else {
+                TreeNode.prototype.children = function () {
                     var that = this,
                         result = [];
                     traverseChild(function (node) {
@@ -214,8 +226,7 @@ var TreeForm = (function () {
                     }, that);
                     return result;
                 }
-            });
-
+            }
             return TreeNode;
         })(),
         TreeForm = (function () {
@@ -225,19 +236,26 @@ var TreeForm = (function () {
             //
             // singleton.
             var instance = null;
-            function TreeForm(data, value, title) {
+
+            function TreeForm(data, id, title) {
                 "use strict";
                 if (!instance) {
                     // 将用户输入再封装一层给createTree处理
                     var wrappedData = {};
-                    title = title || "root";
-                    data[TreeForm.TITLE] = value || "id-root";
-                    wrappedData[title] = data;
+                    id = id || "root";
+                    data[TreeForm.TITLE] = title || data[TreeForm.TITLE] || "rootTitle";
+                    wrappedData[id] = data;
                     var tree = createTree(new TreeNode(TreeNode.ROOT, "godRoot", "godRoot"), wrappedData).nextChild;
-                    Object.defineProperty(this, "tree", {
-                        value: tree,
-                        writable: false
-                    });
+
+                    if (compatible.IE !== null && compatible.IE <= 8) {
+                        this.tree = tree;
+                    } else {
+                        console.log(compatible["IE"]);
+                        Object.defineProperty(this, "tree", {
+                            value: tree,
+                            writable: false
+                        });
+                    }
                     instance = this;
                 }
                 else return instance;
@@ -250,6 +268,8 @@ var TreeForm = (function () {
             TreeForm.ITEMCLASS = "tree-item";
             TreeForm.ITEMTITLECLASS = "tree-item-title";
             TreeForm.ITEMWRAPPERCLASS = "tree-item-wrapper";
+            TreeForm.ITEM_EXPANDED_OPENING_CLASS = "tree-expand-opening";
+            TreeForm.ITEM_EXPANDED_CLOSED_CLASS = "tree-expand-closed";
             // event code
             TreeForm.EVENT_TOGGLE = "toggle";
             TreeForm.EVENT_CLICK = "click";
@@ -260,6 +280,7 @@ var TreeForm = (function () {
             TreeForm.EVENT_NODE_REMOVE = "nodeRemove";
             // 传入json结构的title名
             TreeForm.TITLE = "title";
+            // public methods
             TreeForm.prototype.render = function () {
                 var tree = this.tree,
                     domFrag = document.createElement("div"),
@@ -282,11 +303,16 @@ var TreeForm = (function () {
 
                         itemsWrapper.className = TreeForm.ITEMWRAPPERCLASS;
                         expandedTitle.className = TreeForm.EXPANDEDTITLECLASS;
-                        expandedTitle.textContent = node.title;
-
+                        // ie8 不支持textContent;
+                        if (compatible.IE <= 8 && compatible.IE !== null) {
+                            expandedTitle.innerText = node.title;
+                        }
+                        else {
+                            expandedTitle.textContent = node.title;
+                        }
                         ul.className = TreeForm.EXPANDEDCLASS;
                         // IE 9 不支持dataset
-                        if (compatable.IE > 9 || compatable.IE === null) ul.dataset["id"] = dataID;
+                        if (compatible.IE > 9 || compatible.IE === null) ul.dataset["id"] = dataID;
                         ul.appendChild(expandedTitle);
                         ul.appendChild(itemsWrapper);
 
@@ -297,9 +323,17 @@ var TreeForm = (function () {
                             itemTitle = document.createElement("span");
                         li.className = TreeForm.ITEMCLASS;
                         // IE 9 不支持dataset
-                        if (compatable.IE > 9 || compatable.IE === null) li.dataset["id"] = dataID;
+                        // IE 8 不支持textContent
+                        if (compatible.IE <= 9 && compatible.IE !== null) {
+                            li.setAttribute("data-id", dataID);
+                            itemTitle.innerText = node.title;
+                        }
+                        else {
+                            li.dataset["id"] = dataID;
+                            itemTitle.textContent = node.title;
+                        }
                         li.appendChild(itemTitle);
-                        li.textContent = node.title;
+
 
                         itemTitle.className = TreeForm.ITEMTITLECLASS;
                         domPointer.appendChild(li);
@@ -309,9 +343,7 @@ var TreeForm = (function () {
                 bindEventListener(domFrag);
                 return domFrag;
             };
-
             TreeForm.prototype.search = function (dataID) {
-                if (compatable.IE <= 9) return false;
                 var result = null;
                 traverse(this.tree, function (node, dID) {
                     if (dataID === dID) {
@@ -322,8 +354,17 @@ var TreeForm = (function () {
                 });
                 return result;
             };
-            // private methods
 
+            //event methods
+            TreeForm.prototype.onClick = function (callback) {
+                var cb = callback;
+                if (!callback) {
+                    throw Error("callback is not a function");
+                }
+                Mediator.subscribe(TreeForm.EVENT_CLICK, new Mediator.EventObj(callback));
+            };
+
+            // private methods
             // createTree
             // 创建模型树的方法
             // @param parent 每次遍历树的父节点
@@ -383,39 +424,121 @@ var TreeForm = (function () {
             // 为dom元素绑定事件，提供基础的toggle功能
             // 同时也为用户公开了几个事件函数给予绑定。
             function bindEventListener(domNode) {
-                domNode.addEventListener("click", function (event) {
-                    var target = event.target,
-                        eSpec = new Mediator.EventSpec(TreeForm.EVENT_CLICK, target);
+                function cb(event) {
+                    event = event || window.event;
+                    var target = event.target || event.srcElement;
+                    var eSpec = new Mediator.EventSpec(TreeForm.EVENT_CLICK, target);
                     Mediator.publish(TreeForm.EVENT_CLICK, eSpec);
 
-                    if (target.className === TreeForm.ITEMTITLECLASS) {
-                        event.stopPropagation();
+                    if (target.className.split(/\s+/).indexOf(TreeForm.ITEMTITLECLASS) !== -1) {
+                        if (event.stopPropagation) event.stopPropagation();
+                        else {
+                            event.cancelBubble = true;
+                        }
                     }
-                    if (target.className === TreeForm.EXPANDEDTITLECLASS) {
+                    if (target.className.split(/\s+/).indexOf(TreeForm.EXPANDEDTITLECLASS) !== -1) {
                         if (!eSpec.isUserManipulate) {
                             toggleItemVisibility(target);
                         }
-                        event.stopPropagation();
+                        if (event.stopPropagation) event.stopPropagation();
+                        else {
+                            event.cancelBubble = true;
+                        }
                     }
-                })
+                };
+                if (compatible.IE > 8 || compatible.IE === null) {
+                    domNode.addEventListener("click", cb);
+                } else {
+                    domNode.attachEvent("onclick", cb)
+                }
             }
 
             // toggleItemVisibility
             // 基础toggle功能实现的函数
             function toggleItemVisibility(domNode) {
-                domNode = domNode.parentNode.getElementsByClassName(TreeForm.ITEMWRAPPERCLASS)[0];
-                var displayStatus = domNode.style.display;
+                if (compatible.IE > 8 || compatible.IE === null) {
+                    domNode = domNode.parentNode.getElementsByClassName(TreeForm.ITEMWRAPPERCLASS)[0];
+                } else {
+                    domNode = domNode.parentNode.getElementsByTagName("div")[0];
+                }
+                var displayStatus = domNode.style.display,
+                    classList = (domNode.className).split(/\s+/),
+                    pos = null;
                 domNode.style.display = (displayStatus === "none" || displayStatus === "") ? "block" : "none";
+                if (compatible.IE >= 10 || compatible.IE === null) {
+                    if (domNode.style.display === "none") {
+                        domNode.previousSibling.classList.remove(TreeForm.ITEM_EXPANDED_OPENING_CLASS);
+                        domNode.previousSibling.classList.add(TreeForm.ITEM_EXPANDED_CLOSED_CLASS);
+                    } else {
+                        domNode.previousSibling.classList.add(TreeForm.ITEM_EXPANDED_OPENING_CLASS);
+                        domNode.previousSibling.classList.remove(TreeForm.ITEM_EXPANDED_CLOSED_CLASS);
+                    }
+                } else {
+                    var index;
+                    if (domNode.style.display === "none") {
+                        for (index in classList) {
+                            if (classList[index] === TreeForm.ITEM_EXPANDED_CLOSED_CLASS && classList.hasOwnProperty(index)) {
+                                classList[index] = TreeForm.ITEM_EXPANDED_OPENING_CLASS;
+                            }
+                        }
+                    } else {
+                        for (index in classList) {
+                            if (classList[index] === TreeForm.ITEM_EXPANDED_OPENING_CLASS && classList.hasOwnProperty(index)) {
+                                classList[index] = TreeForm.ITEM_EXPANDED_CLOSED_CLASS;
+                            }
+                        }
+                    }
+                }
             }
 
             return TreeForm;
         })();
-    TreeForm.onClick = function (callback) {
-        if (!callback) {
-            throw Error("callback is not a function");
+    (function init() {
+        var cssText = ".treeForm *{list-style:none;margin:0;padding:0}.treeForm{padding:0}.tree-item{border-left:1px solid orange;margin-bottom:0;margin-left:10px;padding:5px 12px}.tree-item:hover{background:orange;transition:background 1s ease;width:100%}.tree-expand{position:relative;padding-left:10px}.tree-expand-title{display:inline-block;padding:5px 10px;width:100%;border-left:1px solid gray;cursor:pointer}.tree-expand-title:hover{background:#e0e0e0}.tree-item-wrapper{display:none}";
+        function cb() {
+            t = document.createElement("style");
+            if(compatible.IE <= 8 && compatible.IE !== null){
+                t.innerText = cssText;
+            }else{
+                t.textContent = cssText;
+            }
+            document.getElementsByTagName("head")[0].appendChild(t);
         }
-        Mediator.subscribe(TreeForm.EVENT_CLICK, new Mediator.EventObj(callback));
-    };
+        if (compatible.IE <= 8 && compatible.IE !== null) {
+            var t = null;
+            window.attachEvent("onload", cb);
+        }else{
+            window.addEventListener("load", cb);
+        }
+    })();
+
 
     return TreeForm;
-})();
+})
+();
+
+var tree = {
+    title: "kamilic",
+    my: {
+        title: "my",
+        item1: "cool",
+        item2: "bool"
+    },
+    she: {
+        title: "she",
+        item3: "cool",
+        item4: "qooc",
+        is: {
+            title: "cool",
+            lk: "cool",
+            op: "wowo"
+        }
+    },
+    is: "23",
+    baba: "43"
+
+};
+var tr = new TreeForm(tree);
+window.onload = function () {
+    document.getElementsByTagName('div')[0].appendChild(tr.render());
+};

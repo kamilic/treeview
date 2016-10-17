@@ -1,59 +1,7 @@
-ul,li{
-    list-style: none;
-    margin: 0;
-    padding: 0;
-}
-
-.tree-item:hover{
-    background: white;
-    transition: transform 1s ease;
-    transform: translate(10px,0);
-}
-
-.tree-item{
-    margin-bottom: 5px;
-    padding-left: 10px;
-    border-left: 2px solid gray;
-}
-.treeForm{
-    padding: 20px;
-}
-
-.tree-expand{
-    position: relative;
-    margin-left: 10px;
-}
-
-.tree-expand span{
-    width: 100%;
-    cursor: pointer;
-}
-
-.tree-expand span:hover{
-    background: #e0e0e0;
+.tree-expand-opening {
 
 }
 
-.tree-expand .tree-item{
-    margin-left: 10px;
-}
-.tree-expand .tree-expand-title{
-    margin-left: 5px;
-}
+.tree-expand-closed {
 
-.tree-expand-title{
-    display: inline-block;
-    padding: 5px 0;
-}
-
-.tree-item-wrapper{
-    display: none;
-}
-
-.tree-expand-opened{
-
-}
-
-.tree-expand-closed{
-    list-style: circle;
 }
